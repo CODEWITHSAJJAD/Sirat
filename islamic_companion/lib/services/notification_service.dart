@@ -20,28 +20,32 @@ class NotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    // Initialize timezone data
-    tz_data.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Karachi'));
+    try {
+      // Initialize timezone data
+      tz_data.initializeTimeZones();
+      tz.setLocalLocation(tz.getLocation('Asia/Karachi'));
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings();
-    const initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings();
+      const initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _plugin.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _onNotificationTapped,
+      );
 
-    // Request permissions for Android 13+
-    await _requestPermissions();
+      // Request permissions for Android 13+
+      await _requestPermissions();
 
-    // Create notification channels (Android 8+)
-    await _createChannels();
-    _initialized = true;
+      // Create notification channels (Android 8+)
+      await _createChannels();
+      _initialized = true;
+    } catch (e) {
+      debugPrint('Notification initialization error: $e');
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -89,26 +93,38 @@ class NotificationService {
 
   /// Schedule Azan notifications for all 5 prayers of the day.
   Future<void> scheduleAzanNotifications(PrayerTimeEntity prayers) async {
+    if (!_initialized) {
+      debugPrint('Notification service not initialized');
+      return;
+    }
+    
     // Cancel previous day's prayers first
     await cancelAzanNotifications();
 
     final prayerList = prayers.allPrayers;
+    debugPrint('Scheduling ${prayerList.length} prayer notifications');
+    
     for (int i = 0; i < prayerList.length; i++) {
       final prayer = prayerList[i];
-      final scheduledTime = prayer.value;
+      var scheduledTime = prayer.value;
 
-      // Only schedule if prayer time is in the future
-      if (scheduledTime.isAfter(DateTime.now())) {
-        await _scheduleNotification(
-          id: i + 100, // IDs 100–104 reserved for Azan
-          title: '🕌 ${prayer.key} Time',
-          body: 'Time for ${prayer.key} prayer — Allahu Akbar',
-          scheduledDate: scheduledTime,
-          channelId: AppConstants.azanChannelId,
-          channelName: AppConstants.azanChannelName,
-          payload: 'azan_${prayer.key.toLowerCase()}',
-        );
+      // If prayer time has passed, schedule for tomorrow
+      if (scheduledTime.isBefore(DateTime.now())) {
+        scheduledTime = scheduledTime.add(const Duration(days: 1));
+        debugPrint('${prayer.key} time passed, scheduling for tomorrow: $scheduledTime');
+      } else {
+        debugPrint('Scheduling ${prayer.key} at $scheduledTime');
       }
+
+      await _scheduleNotification(
+        id: i + 100, // IDs 100–104 reserved for Azan
+        title: '🕌 ${prayer.key} Time',
+        body: 'Time for ${prayer.key} prayer — Allahu Akbar',
+        scheduledDate: scheduledTime,
+        channelId: AppConstants.azanChannelId,
+        channelName: AppConstants.azanChannelName,
+        payload: 'azan_${prayer.key.toLowerCase()}',
+      );
     }
   }
 

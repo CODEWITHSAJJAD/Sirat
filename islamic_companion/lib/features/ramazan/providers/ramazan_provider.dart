@@ -1,6 +1,6 @@
 // ============================================================
 // ramazan_provider.dart
-// ChangeNotifier for Ramazan module.
+// ChangeNotifier for Ramadan module.
 // Handles: Ramadan detection, Sehr/Iftar times, roza tracking,
 // taraweeh toggle, streak calculation, badge logic, reminders.
 // ============================================================
@@ -13,19 +13,23 @@ import 'package:islamic_companion/features/ramazan/domain/repositories/ramazan_r
 import 'package:islamic_companion/services/notification_service.dart';
 import 'package:islamic_companion/services/prayer_time_service.dart';
 import 'package:islamic_companion/services/ramazan_service.dart';
+import 'package:islamic_companion/services/hijri_calendar_service.dart';
 
 class RamazanProvider extends ChangeNotifier {
   final RamazanRepository _repository;
   final RamazanService _ramazanService;
   final NotificationService _notificationService;
+  final HijriCalendarService _hijriService;
 
   RamazanProvider({
     required RamazanRepository repository,
     required RamazanService ramazanService,
     required NotificationService notificationService,
+    required HijriCalendarService hijriService,
   })  : _repository = repository,
         _ramazanService = ramazanService,
-        _notificationService = notificationService;
+        _notificationService = notificationService,
+        _hijriService = hijriService;
 
   // ── State ──────────────────────────────────────────────────
   bool _isRamadan = false;
@@ -38,7 +42,6 @@ class RamazanProvider extends ChangeNotifier {
   int _lifetimeFasts = 0;
   List<RamazanDayEntity> _allDays = [];
   bool _isLoading = false;
-  int _moonAdjustment = 0; // For Pakistan: typically +1 day
 
   // ── Getters ───────────────────────────────────────────────
   bool get isRamadan => _isRamadan;
@@ -53,20 +56,19 @@ class RamazanProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get rozaCompleted => _today?.rozaCompleted ?? false;
   bool get taraweehDone => _today?.taraweehDone ?? false;
-  int get moonAdjustment => _moonAdjustment;
+  int get moonAdjustment => _hijriService.moonAdjustment;
 
   String? get rozaBadge => _ramazanService.getBadgeForStreak(_rozaStreak);
 
-  /// Set moon sighting adjustment (+1 or -1 day for Pakistan)
-  void setMoonAdjustment(int days) {
-    _moonAdjustment = days;
-    _refreshRamadanStatus();
+  void _refreshRamadanStatus() {
+    _isRamadan = _ramazanService.isRamadanActive(moonAdjustment: moonAdjustment);
+    _ramadanDayNumber = _ramazanService.getRamadanDayNumber(moonAdjustment: moonAdjustment);
+    notifyListeners();
   }
 
-  void _refreshRamadanStatus() {
-    _isRamadan = _ramazanService.isRamadanActive(moonAdjustment: _moonAdjustment);
-    _ramadanDayNumber = _ramazanService.getRamadanDayNumber(moonAdjustment: _moonAdjustment);
-    notifyListeners();
+  /// Public method to refresh Ramadan status when moon adjustment changes
+  void refreshFromHijri() {
+    _refreshRamadanStatus();
   }
 
   bool get isSehrTime {
@@ -116,8 +118,11 @@ class RamazanProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    _isRamadan = _ramazanService.isRamadanActive(moonAdjustment: _moonAdjustment);
-    _ramadanDayNumber = _ramazanService.getRamadanDayNumber(moonAdjustment: _moonAdjustment);
+    // Get moon adjustment from Hijri Calendar Service (shared with Home screen)
+    final adjustment = _hijriService.moonAdjustment;
+
+    _isRamadan = _ramazanService.isRamadanActive(moonAdjustment: adjustment);
+    _ramadanDayNumber = _ramazanService.getRamadanDayNumber(moonAdjustment: adjustment);
 
     final dateKey = DateTime.now().toHiveKey();
     _today = await _repository.getDay(dateKey) ??

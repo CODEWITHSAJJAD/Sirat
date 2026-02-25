@@ -36,6 +36,8 @@ class HijriCalendarProvider extends ChangeNotifier {
   String getHijriMonthName(int month) => _service.getHijriMonthName(month);
 
   Future<void> load() async {
+    // Ensure preferences are initialized before reading values
+    await _service.ensureInit();
     _moonAdjustment = _service.moonAdjustment;
     _currentHijri = _service.getCurrentHijriDate();
     _selectedHijri = _currentHijri;
@@ -62,6 +64,12 @@ class HijriCalendarProvider extends ChangeNotifier {
     await _service.setMoonAdjustment(newVal);
     _moonAdjustment = newVal;
     _currentHijri = _service.getCurrentHijriDate();
+    // Also update selected day info with new adjustment
+    _selectedHijri = _service.toHijri(_selectedGregorian);
+    _selectedDayEvents = _service.getEventsForDay(
+      _selectedHijri!.hMonth,
+      _selectedHijri!.hDay,
+    );
     notifyListeners();
   }
 

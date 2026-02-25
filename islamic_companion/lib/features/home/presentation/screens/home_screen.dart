@@ -15,6 +15,7 @@ import 'package:islamic_companion/core/utils/date_extensions.dart';
 import 'package:islamic_companion/features/prayer/providers/prayer_times_provider.dart';
 import 'package:islamic_companion/features/namaz_streak/providers/namaz_streak_provider.dart';
 import 'package:islamic_companion/features/ramazan/providers/ramazan_provider.dart';
+import 'package:islamic_companion/features/hijri_calendar/providers/hijri_calendar_provider.dart';
 import 'package:islamic_companion/features/daily_content/providers/daily_content_provider.dart';
 import 'package:islamic_companion/features/daily_content/presentation/widgets/daily_content_card.dart';
 
@@ -23,14 +24,10 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<RamazanProvider>(
-      builder: (context, ramazanProvider, _) {
+    return Consumer<HijriCalendarProvider>(
+      builder: (context, hijriProvider, _) {
         // Get adjusted Hijri date based on moon sighting
-        final adjustment = ramazanProvider.moonAdjustment;
-        final hijri = adjustment == 0 
-            ? HijriCalendar.now() 
-            : HijriCalendar.fromDate(DateTime.now().add(Duration(days: adjustment)));
-        
+        final hijri = hijriProvider.currentHijri ?? HijriCalendar.now();
         final now = DateTime.now();
 
         return Scaffold(
@@ -57,7 +54,7 @@ class HomeScreen extends StatelessWidget {
                             const SizedBox(height: 6),
                             // Hijri date
                             Text(
-                              '${hijri.hDay} ${_hijriMonthName(hijri.hMonth)} ${hijri.hYear} AH',
+                              '${hijri.hDay} ${hijriProvider.hijriMonthName} ${hijri.hYear} AH',
                               style: AppTextStyles.titleLarge
                                   .copyWith(color: AppColors.gold),
                             ),
@@ -104,18 +101,7 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 14),
 
                 // ── Ramazan Banner (when active) ──────────
-                Consumer<RamazanProvider>(builder: (_, rp, __) {
-                  if (!rp.isRamadan) return const SizedBox.shrink();
-                  return Column(children: [
-                    _RamadanBanner(
-                      dayNumber: rp.ramadanDayNumber ?? 1,
-                      phase: rp.currentFastPhase,
-                      targetTime: rp.activeTime,
-                      countdown: rp.activeCountdown,
-                    ),
-                    const SizedBox(height: 14),
-                  ]);
-                }),
+                _RamadanBannerSection(),
 
                 // ── Namaz Streak Summary ──────────────────
                 _NamazStreakBanner(),
@@ -278,6 +264,32 @@ class _RamadanBanner extends StatelessWidget {
         ]),
       ]),
     );
+  }
+}
+
+// ── Ramadan Banner Widget for Home Screen ───────────────────────
+class _RamadanBannerSection extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final hp = context.watch<HijriCalendarProvider>();
+    final rp = context.watch<RamazanProvider>();
+    
+    // Refresh Ramadan status when Hijri calendar changes (moon adjustment)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      rp.refreshFromHijri();
+    });
+    
+    final isRamadan = hp.currentHijri?.hMonth == 9;
+    if (!isRamadan) return const SizedBox.shrink();
+    return Column(children: [
+      _RamadanBanner(
+        dayNumber: rp.ramadanDayNumber ?? 1,
+        phase: rp.currentFastPhase,
+        targetTime: rp.activeTime,
+        countdown: rp.activeCountdown,
+      ),
+      const SizedBox(height: 14),
+    ]);
   }
 }
 

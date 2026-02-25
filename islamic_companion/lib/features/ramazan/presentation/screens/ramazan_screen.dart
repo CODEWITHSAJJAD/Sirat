@@ -1,6 +1,6 @@
 // ============================================================
 // ramazan_screen.dart
-// Ramazan module full UI.
+// Ramadan module full UI.
 // Shows: Sehr/Iftar countdown, Roza toggle, Taraweeh tracker,
 // Roza streak with badges, and Ramadan calendar grid.
 // Auto-activates when Hijri month = 9.
@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:islamic_companion/core/theme/app_theme.dart';
 import 'package:islamic_companion/core/utils/date_extensions.dart';
 import 'package:islamic_companion/features/ramazan/providers/ramazan_provider.dart';
+import 'package:islamic_companion/features/hijri_calendar/providers/hijri_calendar_provider.dart';
 import 'package:intl/intl.dart';
 
 class RamazanScreen extends StatelessWidget {
@@ -18,239 +19,112 @@ class RamazanScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hp = context.watch<HijriCalendarProvider>();
+    final rp = context.watch<RamazanProvider>();
+    
+    // Refresh Ramadan status when Hijri calendar changes (moon adjustment)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      rp.refreshFromHijri();
+    });
+    
+    final isRamadan = hp.currentHijri?.hMonth == 9;
+    if (rp.isLoading) {
+      return const Scaffold(
+        body: Center(
+            child: CircularProgressIndicator(color: AppColors.gold)),
+      );
+    }
+    if (!isRamadan) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ramadan 🌙')),
+        body: _NotRamadanView(
+          lifetimeFasts: rp.lifetimeFasts,
+          longestStreak: rp.longestStreak,
+        ),
+      );
+    }
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ramadan 🌙'),
-        actions: [
-          Consumer<RamazanProvider>(
-            builder: (context, provider, _) => IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () => _showMoonAdjustmentSheet(context, provider),
-            ),
-          ),
-        ],
-      ),
-      body: Consumer<RamazanProvider>(
-        builder: (context, provider, _) {
-          if (provider.isLoading) {
-            return const Center(
-                child: CircularProgressIndicator(color: AppColors.gold));
-          }
-
-          if (!provider.isRamadan) {
-            return _NotRamadanView(
-              lifetimeFasts: provider.lifetimeFasts,
-              longestStreak: provider.longestStreak,
-            );
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Ramadan Day Header ─────────────────────
-                _RamadanHeaderCard(
-                  dayNumber: provider.ramadanDayNumber ?? 1,
-                  rozaStreak: provider.rozaStreak,
-                  badge: provider.rozaBadge,
-                ),
-                const SizedBox(height: 16),
-
-                // ── Sehr/Iftar Countdown Cards ─────────────
-                Row(children: [
-                  Expanded(
-                    child: _TimeCard(
-                      label: 'Sehr',
-                      icon: Icons.brightness_3,
-                      time: provider.sahrTime,
-                      countdown: provider.timeToSahr,
-                      color: AppColors.emeraldAccent,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _TimeCard(
-                      label: 'Iftar',
-                      icon: Icons.wb_twilight,
-                      time: provider.iftarTime,
-                      countdown: provider.timeToIftar,
-                      color: AppColors.gold,
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-
-                // ── Roza Toggle ────────────────────────────
-                _ToggleCard(
-                  icon: '🌙',
-                  title: "Today's Roza",
-                  subtitle: provider.rozaCompleted
-                      ? 'Masha Allah! Roza complete'
-                      : 'Mark your fast',
-                  value: provider.rozaCompleted,
-                  onChanged: provider.toggleRoza,
-                  activeColor: AppColors.gold,
-                ),
-                const SizedBox(height: 10),
-
-                // ── Taraweeh Toggle ────────────────────────
-                _ToggleCard(
-                  icon: '🕌',
-                  title: 'Taraweeh',
-                  subtitle: provider.taraweehDone
-                      ? 'Taraweeh prayed tonight'
-                      : 'Mark Taraweeh prayer',
-                  value: provider.taraweehDone,
-                  onChanged: provider.toggleTaraweeh,
-                  activeColor: AppColors.emeraldAccent,
-                ),
-                const SizedBox(height: 20),
-
-                // ── Stats Row ──────────────────────────────
-                Row(children: [
-                  _StatChip(
-                      label: 'Current Streak',
-                      value: '${provider.rozaStreak} days 🔥'),
-                  const SizedBox(width: 10),
-                  _StatChip(
-                      label: 'Lifetime Fasts',
-                      value: '${provider.lifetimeFasts} 🌙'),
-                  const SizedBox(width: 10),
-                  _StatChip(
-                      label: 'Best Streak',
-                      value: '${provider.longestStreak} days'),
-                ]),
-                const SizedBox(height: 20),
-
-                // ── Ramadan Calendar Grid ──────────────────
-                const Text('Ramadan Calendar',
-                    style: AppTextStyles.titleLarge),
-                const SizedBox(height: 12),
-                _RamadanCalendarGrid(
-                  allDays: provider.allDays,
-                  currentDay: provider.ramadanDayNumber ?? 1,
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showMoonAdjustmentSheet(BuildContext context, RamazanProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.emeraldMid,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
+      appBar: AppBar(title: const Text('Ramadan 🌙')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Moon Sighting Adjustment',
-              style: AppTextStyles.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Adjust calendar based on actual moon sighting in your region.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Current Adjustment:',
-              style: TextStyle(color: AppColors.gold, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _AdjustmentButton(
-                  label: '-1 Day',
-                  isSelected: provider.moonAdjustment == -1,
-                  onTap: () {
-                    provider.setMoonAdjustment(-1);
-                    Navigator.pop(ctx);
-                  },
-                ),
-                _AdjustmentButton(
-                  label: '0 Days',
-                  isSelected: provider.moonAdjustment == 0,
-                  onTap: () {
-                    provider.setMoonAdjustment(0);
-                    Navigator.pop(ctx);
-                  },
-                ),
-                _AdjustmentButton(
-                  label: '+1 Day',
-                  isSelected: provider.moonAdjustment == 1,
-                  onTap: () {
-                    provider.setMoonAdjustment(1);
-                    Navigator.pop(ctx);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.emeraldDark,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 18, color: AppColors.gold),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'For Pakistan, typically use +1 day if calendar shows wrong Ramadan dates.',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                  ),
-                ],
-              ),
+            _RamadanHeaderCard(
+              dayNumber: rp.ramadanDayNumber ?? 1,
+              rozaStreak: rp.rozaStreak,
+              badge: rp.rozaBadge,
             ),
             const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: _TimeCard(
+                  label: 'Sehr',
+                  icon: Icons.brightness_3,
+                  time: rp.sahrTime,
+                  countdown: rp.timeToSahr,
+                  color: AppColors.emeraldAccent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _TimeCard(
+                  label: 'Iftar',
+                  icon: Icons.wb_twilight,
+                  time: rp.iftarTime,
+                  countdown: rp.timeToIftar,
+                  color: AppColors.gold,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _ToggleCard(
+              icon: '🌙',
+              title: "Today's Roza",
+              subtitle: rp.rozaCompleted
+                  ? 'Masha Allah! Roza complete'
+                  : 'Mark your fast',
+              value: rp.rozaCompleted,
+              onChanged: rp.toggleRoza,
+              activeColor: AppColors.gold,
+            ),
+            const SizedBox(height: 10),
+            _ToggleCard(
+              icon: '🕌',
+              title: 'Taraweeh',
+              subtitle: rp.taraweehDone
+                  ? 'Taraweeh prayed tonight'
+                  : 'Mark Taraweeh prayer',
+              value: rp.taraweehDone,
+              onChanged: rp.toggleTaraweeh,
+              activeColor: AppColors.emeraldAccent,
+            ),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(
+                child: _StatChip(
+                    label: 'Current Streak',
+                    value: '${rp.rozaStreak} 🔥'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatChip(
+                    label: 'Lifetime Fasts',
+                    value: '${rp.lifetimeFasts} 🌙'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _StatChip(
+                    label: 'Best Streak',
+                    value: '${rp.longestStreak}'),
+              ),
+            ]),
+            const SizedBox(height: 20),
+            const Text('Ramadan Calendar', style: AppTextStyles.titleLarge),
+            const SizedBox(height: 12),
+            _RamadanCalendarGrid(allDays: rp.allDays, currentDay: rp.ramadanDayNumber ?? 1),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AdjustmentButton extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _AdjustmentButton({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.gold : AppColors.emeraldDark,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppColors.gold : AppColors.cardBorder,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? AppColors.emeraldDark : AppColors.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
         ),
       ),
     );
@@ -458,10 +332,13 @@ class _ToggleCard extends StatelessWidget {
               Text(subtitle, style: AppTextStyles.bodyMedium),
             ]),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: activeColor,
+          Material(
+            color: Colors.transparent,
+            child: Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: activeColor,
+            ),
           ),
         ],
       ),
@@ -476,25 +353,23 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: AppColors.emeraldMid,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.cardBorder),
-        ),
-        child: Column(children: [
-          Text(value,
-              style: AppTextStyles.titleMedium
-                  .copyWith(color: AppColors.gold, fontSize: 15),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 2),
-          Text(label,
-              style: AppTextStyles.labelSmall,
-              textAlign: TextAlign.center),
-        ]),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.emeraldMid,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.cardBorder),
       ),
+      child: Column(children: [
+        Text(value,
+            style: AppTextStyles.titleMedium
+                .copyWith(color: AppColors.gold, fontSize: 14),
+            textAlign: TextAlign.center),
+        const SizedBox(height: 2),
+        Text(label,
+            style: AppTextStyles.labelSmall,
+            textAlign: TextAlign.center),
+      ]),
     );
   }
 }

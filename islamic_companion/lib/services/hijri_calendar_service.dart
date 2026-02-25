@@ -2,36 +2,48 @@
 // hijri_calendar_service.dart
 // Wraps the Hijri package. Provides: current Hijri date,
 // Gregorian↔Hijri conversion, Pakistani Islamic events list.
-// Moon adjustment (+/- 1 day) saved in Hive CalendarSettings.
+// Moon adjustment saved in SharedPreferences for persistence.
 // ============================================================
 
 import 'package:hijri/hijri_calendar.dart';
-import 'package:hive/hive.dart';
-import 'package:islamic_companion/features/hijri_calendar/data/models/calendar_settings_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HijriCalendarService {
-  final Box<CalendarSettingsModel> _box;
-  static const String _settingsKey = 'cal_settings';
+  static const String _moonAdjustmentKey = 'moon_sighting_adjustment';
+  SharedPreferences? _prefs;
 
-  HijriCalendarService(this._box);
+  Future<void> ensureInit() async {
+    _prefs ??= await SharedPreferences.getInstance();
+  }
 
-  int get moonAdjustment => _box.get(_settingsKey)?.moonAdjustment ?? 0;
+  int get moonAdjustment {
+    // Ensure prefs are initialized if this is called before initialization completes
+    // This will return 0 if not yet loaded; load() will refresh the value after ensureInit.
+    return _prefs?.getInt(_moonAdjustmentKey) ?? 0;
+  }
 
   /// Current Hijri date with moon adjustment applied
   HijriCalendar getCurrentHijriDate() {
     final now = HijriCalendar.now();
-    if (moonAdjustment == 0) return now;
+    final adjustment = moonAdjustment;
+    if (adjustment == 0) return now;
 
     // Apply +/- 1 day adjustment by converting to Gregorian and back
-    final gregorian = DateTime.now().add(Duration(days: moonAdjustment));
+    final gregorian = DateTime.now().add(Duration(days: adjustment));
     return HijriCalendar.fromDate(gregorian);
   }
 
   DateTime gregorianNow() => DateTime.now();
 
-  /// Convert a Gregorian date to Hijri
+  /// Convert a Gregorian date to Hijri with moon adjustment applied
   HijriCalendar toHijri(DateTime date) {
-    return HijriCalendar.fromDate(date);
+    final adjustment = moonAdjustment;
+    if (adjustment == 0) {
+      return HijriCalendar.fromDate(date);
+    }
+    // Apply adjustment by adding/subtracting days
+    final adjustedDate = date.add(Duration(days: adjustment));
+    return HijriCalendar.fromDate(adjustedDate);
   }
 
   /// Convert Hijri to Gregorian
@@ -44,10 +56,13 @@ class HijriCalendarService {
   }
 
   Future<void> setMoonAdjustment(int days) async {
-    final model = _box.get(_settingsKey) ??
-        CalendarSettingsModel(moonAdjustment: 0);
-    model.moonAdjustment = days;
-    await _box.put(_settingsKey, model);
+    await ensureInit();
+    await _prefs?.setInt(_moonAdjustmentKey, days);
+  }
+
+  /// Ensure preferences are initialized (public for providers to call during load)
+  Future<void> loadMoonAdjustment() async {
+    await ensureInit();
   }
 
   /// Full Hijri month name
@@ -64,7 +79,7 @@ class HijriCalendarService {
   /// Pakistani Islamic holidays (static, offline)
   List<Map<String, dynamic>> getPakistanIslamicEvents() {
     return [
-      {'name': '12 Rabi al-Awwal (Milad un Nabi ﷺ)', 'hMonth': 3, 'hDay': 12},
+      {'name': '12 Rabi al-Awwal (Milad un Nabi)', 'hMonth': 3, 'hDay': 12},
       {'name': '27 Rajab (Shab-e-Miraj)', 'hMonth': 7, 'hDay': 27},
       {'name': '15 Shaban (Shab-e-Barat)', 'hMonth': 8, 'hDay': 15},
       {'name': '1 Ramadan (Start of Ramadan)', 'hMonth': 9, 'hDay': 1},

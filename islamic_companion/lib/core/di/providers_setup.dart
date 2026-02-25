@@ -53,6 +53,7 @@ List<SingleChildWidget> buildProviders({
     Provider<RamazanService>(create: (_) => RamazanService()),
     Provider<DailyContentService>(create: (_) => DailyContentService()),
     Provider<ZakatCalculatorService>(create: (_) => ZakatCalculatorService()),
+    Provider<HijriCalendarService>(create: (_) => HijriCalendarService()),
     
     // ── Feature Providers ─────────────────────────────────
     
@@ -66,6 +67,31 @@ List<SingleChildWidget> buildProviders({
         ),
         notificationService: notificationService,
       )..initialize(),
+    ),
+
+    // 6. Hijri Calendar - must be before Ramadan
+    ChangeNotifierProvider<HijriCalendarProvider>(
+      create: (context) => HijriCalendarProvider(
+        service: context.read<HijriCalendarService>(),
+      )..load(),
+    ),
+
+    // 4. Ramazan Module - depends on HijriCalendarProvider
+    ChangeNotifierProxyProvider<PrayerTimesProvider, RamazanProvider>(
+      create: (context) => RamazanProvider(
+        repository: RamazanRepositoryImpl(
+          Hive.box<RamazanDayModel>(AppConstants.ramazanBox),
+        ),
+        ramazanService: context.read<RamazanService>(),
+        notificationService: notificationService,
+        hijriService: context.read<HijriCalendarService>(),
+      )..initialize(prayerSettings: null),
+      update: (context, prayerProvider, ramazanProvider) {
+        if (prayerProvider.settings != null && ramazanProvider != null) {
+          ramazanProvider.updatePrayerSettings(prayerProvider.settings);
+        }
+        return ramazanProvider!;
+      },
     ),
 
     // 2. Namaz Streak
@@ -88,22 +114,6 @@ List<SingleChildWidget> buildProviders({
     ),
 
     // 4. Ramazan Module
-    ChangeNotifierProxyProvider<PrayerTimesProvider, RamazanProvider>(
-      create: (context) => RamazanProvider(
-        repository: RamazanRepositoryImpl(
-          Hive.box<RamazanDayModel>(AppConstants.ramazanBox),
-        ),
-        ramazanService: context.read<RamazanService>(),
-        notificationService: notificationService,
-      )..initialize(prayerSettings: null),
-      update: (context, prayerProvider, ramazanProvider) {
-        // Always update ramazan provider with prayer settings when they become available
-        if (prayerProvider.settings != null && ramazanProvider != null) {
-          ramazanProvider.updatePrayerSettings(prayerProvider.settings);
-        }
-        return ramazanProvider!;
-      },
-    ),
 
     // 5. Zakat Calculator
     ChangeNotifierProvider<ZakatProvider>(
@@ -113,15 +123,6 @@ List<SingleChildWidget> buildProviders({
         ),
         calculator: context.read<ZakatCalculatorService>(),
       )..loadHistory(),
-    ),
-
-    // 6. Hijri Calendar
-    ChangeNotifierProvider<HijriCalendarProvider>(
-      create: (context) => HijriCalendarProvider(
-        service: HijriCalendarService(
-          Hive.box<CalendarSettingsModel>(AppConstants.calendarSettingsBox),
-        ),
-      )..load(),
     ),
 
     // 7. Daily Content
